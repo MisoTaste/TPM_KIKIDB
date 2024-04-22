@@ -1,0 +1,82 @@
+'// For Excel vba
+Option Explicit
+
+Sub ListFilesWithRecordset()
+    Dim fso As Object, folder As Object, subfolder As Object
+    Dim file As Object
+    Dim wsList As Worksheet
+    Dim folderPath As String
+    Dim fldr As FileDialog
+    Dim sItem As String
+    Dim rs As Object
+    
+    Set wsList = ThisWorkbook.Sheets("DirList") '出力するシート名を指定
+    wsList.Cells.ClearContents 'シートの内容をクリア
+    
+    'フォルダ選択ダイアログの表示
+    Set fldr = Application.FileDialog(msoFileDialogFolderPicker)
+    With fldr
+        .Title = "ディレクトリを選択してください"
+        .AllowMultiSelect = False
+        If .Show <> -1 Then Exit Sub
+        sItem = .SelectedItems(1)
+    End With
+    
+    folderPath = sItem & "\"
+    
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set folder = fso.GetFolder(folderPath)
+    
+    'ADO Recordsetの初期化
+    Set rs = CreateObject("ADODB.Recordset")
+    With rs
+        .Fields.Append "FileName", 200, 255 'ファイル名のフィールド
+        .Fields.Append "FilePath", 200, 255 'ファイルパスのフィールド
+        .Open
+    End With
+    
+    '指定したディレクトリ内のファイルをRecordsetに格納
+    For Each file In folder.Files
+        rs.AddNew
+        rs.Fields("FileName").Value = file.Name
+        rs.Fields("FilePath").Value = file.Path
+        rs.Update
+    Next file
+    
+    'サブフォルダ内のファイルも回帰的に処理
+    For Each subfolder In folder.SubFolders
+        ListFilesInSubfolderWithRecordset subfolder, rs
+    Next subfolder
+    
+    'Recordsetの内容をExcelシートに出力
+    rs.MoveFirst
+    Dim r As Long
+    r = 1
+    Do While Not rs.EOF
+        wsList.Cells(r, 1).Value = r
+        wsList.Cells(r, 2).Value = rs.Fields("FileName").Value
+        
+        wsList.Cells(r, 3).Value = rs.Fields("FilePath").Value
+        rs.MoveNext
+        r = r + 1
+    Loop
+    
+    rs.Close
+    Set rs = Nothing
+    Set fso = Nothing
+    Set fldr = Nothing
+End Sub
+
+Sub ListFilesInSubfolderWithRecordset(subfolder As Object, rs As Object)
+    Dim file As Object
+    For Each file In subfolder.Files
+        rs.AddNew
+        rs.Fields("FileName").Value = file.Name
+        rs.Fields("FilePath").Value = file.Path
+        rs.Update
+    Next file
+    'サブフォルダがあればさらに回帰
+    For Each subfolder In subfolder.SubFolders
+        ListFilesInSubfolderWithRecordset subfolder, rs
+    Next subfolder
+End Sub
